@@ -242,7 +242,7 @@ def get_lr(it):
 
 optimizer = torch.optim.AdamW(model_gpt.parameters(), lr=3e-4, betas=(0.9, 0.95), eps=1e-8)
 
-for steps in range(max_steps):
+for step in range(max_steps):
     t1 = time.time()
     optimizer.zero_grad()
     x, y = train_loader.next_batch()
@@ -251,7 +251,7 @@ for steps in range(max_steps):
     logits, loss = model_gpt(x, y)
     norm = torch.nn.utils.clip_grad_norm_(model_gpt.parameters(), 1.0)
     loss.backward()
-    lr = get_lr(steps)
+    lr = get_lr(step)
     for param_groups in optimizer.param_groups:
         param_groups[lr] = lr
 
@@ -259,7 +259,7 @@ for steps in range(max_steps):
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     t2 = time.time()
-    print(f'step:{i} | loss: {loss.item():.6f} | lr :{lr:.6f} | time: {(t2-t1)*1000} | norm: {norm:4f} | '
+    print(f'step:{step} | loss: {loss.item():.6f} | lr :{lr:.6f} | time: {(t2-t1)*1000} | norm: {norm:4f} | '
           f'token/sec:{(train_loader.B * train_loader.T) / (t2-t1)}')
 
 # model_gpt = GPT.from_pretrained('gpt2')
