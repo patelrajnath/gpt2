@@ -101,6 +101,7 @@ class GPT(nn.Module):
         self.apply(self._init_weights)
 
     def _init_weights(self, module):
+        # NOTE:
         if isinstance(module, nn.Linear):
             std = 0.02
             if hasattr(module, 'GPT_INIT_SCALE'):
@@ -202,6 +203,9 @@ class DataLoaderLite(object):
         return x, y
 
 
+
+
+
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 if torch.cuda.is_available():
@@ -213,27 +217,50 @@ if torch.cuda.is_available():
 
 num_return_sequences = 5
 max_length = 30
+max_lr = 3e-4
+min_lr = max_lr * 0.1
+warmpu_steps = 10
+max_steps = 50
+
 model_gpt = GPT(GPTConfig(vocab_size=50304))
 model_gpt.to(device)
 if torch.cuda.is_available():
     model_gpt = torch.compile(model_gpt)
 train_loader = DataLoaderLite(B=4, T=1024)
 
-optimizer = torch.optim.AdamW(model_gpt.parameters(), lr=3e-4)
 
-for i in range(50):
+def get_lr(it):
+    if it < warmpu_steps:
+        return max_lr * (it + 1) / warmpu_steps
+    if it > max_steps:
+        return min_lr
+    decay_rate = (it - warmpu_steps) / (max_steps - warmpu_steps)
+    assert 0 <= decay_rate <= 1
+    coeff = 0.5 * (1.0 + math.cos(math.pi * decay_rate))
+    return min_lr + coeff * (max_lr - min_lr)
+
+
+optimizer = torch.optim.AdamW(model_gpt.parameters(), lr=3e-4, betas=(0.9, 0.95), eps=1e-8)
+
+for steps in range(max_steps):
     t1 = time.time()
     optimizer.zero_grad()
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
     # with torch.autocast(device_type=device, dtype=torch.bfloat16):
     logits, loss = model_gpt(x, y)
+    norm = torch.nn.utils.clip_grad_norm_(model_gpt.parameters(), 1.0)
     loss.backward()
+    lr = get_lr(steps)
+    for param_groups in optimizer.param_groups:
+        param_groups[lr] = lr
+
     optimizer.step()
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     t2 = time.time()
-    print(f'loss: {loss.item()}, step:{i}, time: {(t2-t1)*1000}, token/sec:{(train_loader.B * train_loader.T) / (t2-t1)}')
+    print(f'step:{i} | loss: {loss.item():.6f} | lr :{lr:.6f} | time: {(t2-t1)*1000} | norm: {norm:4f} | '
+          f'token/sec:{(train_loader.B * train_loader.T) / (t2-t1)}')
 
 # model_gpt = GPT.from_pretrained('gpt2')
 # model_gpt = GPT2LMHeadModel.from_pretrained('gpt2')
