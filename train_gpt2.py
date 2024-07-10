@@ -224,8 +224,8 @@ for i in range(50):
     optimizer.zero_grad()
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
-    with torch.autocast(device_type=device, dtype=torch.bfloat16):
-        logits, loss = model_gpt(x, y)
+    # with torch.autocast(device_type=device, dtype=torch.bfloat16):
+    logits, loss = model_gpt(x, y)
     loss.backward()
     optimizer.step()
     if torch.cuda.is_available():
