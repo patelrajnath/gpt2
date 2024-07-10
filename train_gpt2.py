@@ -1,3 +1,4 @@
+import inspect
 import math
 import time
 from dataclasses import dataclass
@@ -105,7 +106,7 @@ class GPT(nn.Module):
         if isinstance(module, nn.Linear):
             std = 0.02
             if hasattr(module, 'GPT_INIT_SCALE'):
-                std = (2*self.config.n_layer) ** -0.5
+                std = (2 * self.config.n_layer) ** -0.5
             torch.nn.init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 torch.nn.init.zeros_(module.bias)
@@ -176,6 +177,29 @@ class GPT(nn.Module):
 
         return model
 
+    def configure_optimizer(self, weight_decay, learning_rate, device):
+        param_dict = {pn: p for pn, p in self.named_parameters()}
+        param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
+
+        decay_params = [p for _, p in param_dict.items() if p.dim >= 2]
+        nodecay_params = [p for _, p in param_dict.items() if p.dim <= 2]
+
+        num_decay_params = sum(p.numel() for p in decay_params)
+        num_nodecay_params = sum(p.numel() for p in nodecay_params)
+        print(f'num params decayed: {len(decay_params)} with {num_decay_params} parameters')
+        print(f'num params nodecayed: {len(nodecay_params)} with {num_nodecay_params} parameters')
+        optim_groups = [
+            {'params': decay_params, 'weight)decay': weight_decay},
+            {'params': nodecay_params, 'weight_decay': 0.0}
+        ]
+
+        fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
+        use_fused = fused_available and 'cuda' in device
+        print(f'using fused AdamW:{use_fused}')
+        optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=(0.9, 0.95), eps=1e-8, fused=use_fused)
+
+        return optimizer
+
 
 class DataLoaderLite(object):
     def __init__(self, B, T):
@@ -203,11 +227,7 @@ class DataLoaderLite(object):
         return x, y
 
 
-
-
-
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
 if torch.cuda.is_available():
     torch.set_float32_matmul_precision('high')
 
@@ -228,6 +248,8 @@ if torch.cuda.is_available():
     model_gpt = torch.compile(model_gpt)
 train_loader = DataLoaderLite(B=4, T=1024)
 
+optimizer = model_gpt.configure_optimizer(weight_decay=0.1, learning_rate=max_lr, device=device)
+
 
 def get_lr(it):
     if it < warmpu_steps:
@@ -240,8 +262,6 @@ def get_lr(it):
     return min_lr + coeff * (max_lr - min_lr)
 
 
-optimizer = torch.optim.AdamW(model_gpt.parameters(), lr=3e-4, betas=(0.9, 0.95), eps=1e-8)
-
 for step in range(max_steps):
     t1 = time.time()
     optimizer.zero_grad()
@@ -249,8 +269,10 @@ for step in range(max_steps):
     x, y = x.to(device), y.to(device)
     # with torch.autocast(device_type=device, dtype=torch.bfloat16):
     logits, loss = model_gpt(x, y)
-    norm = torch.nn.utils.clip_grad_norm_(model_gpt.parameters(), 1.0)
     loss.backward()
+
+    norm = torch.nn.utils.clip_grad_norm_(model_gpt.parameters(), 1.0)
+
     lr = get_lr(step)
     for param_groups in optimizer.param_groups:
         param_groups['lr'] = lr
@@ -259,8 +281,8 @@ for step in range(max_steps):
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     t2 = time.time()
-    print(f'step:{step} | loss: {loss.item():.6f} | lr :{lr:.6f} | time: {(t2-t1)*1000}ms | norm: {norm:0.4f} | '
-          f'token/sec:{(train_loader.B * train_loader.T) / (t2-t1)}')
+    print(f'step:{step} | loss: {loss.item():.6f} | lr :{lr:.6f} | time: {(t2 - t1) * 1000}ms | norm: {norm:0.4f} | '
+          f'token/sec:{(train_loader.B * train_loader.T) / (t2 - t1)}')
 
 # model_gpt = GPT.from_pretrained('gpt2')
 # model_gpt = GPT2LMHeadModel.from_pretrained('gpt2')
