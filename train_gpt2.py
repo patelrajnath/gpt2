@@ -4,6 +4,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from transformers import GPT2LMHeadModel
+import tiktoken
 
 
 class CausalSelfAttention(nn.Module):
@@ -88,7 +89,10 @@ class GPT(nn.Module):
 
         self.lm_head = nn.Linear(config.n_embed, config.vocab_size, bias=False)
 
-    def forward(self, idx):
+        # weight sharing scheme
+        self.transformer.wte.weight = self.lm_head.weight
+
+    def forward(self, idx, target=None):
         B, T = idx.size()
 
         assert T <= self.config.block_size, f'Cannot forwad a sequence of length:{T}, ' \
@@ -103,8 +107,11 @@ class GPT(nn.Module):
 
         x = self.transformer.ln_f(x)
         logits = self.lm_head(x)
+        loss = 0
+        if target is not None:
+            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), target.view(-1))
 
-        return logits
+        return logits, loss
 
     @classmethod
     def from_pretrained(cls, model_type):
@@ -149,34 +156,77 @@ class GPT(nn.Module):
         return model
 
 
+class DataLoaderLite(object):
+    def __init__(self, B, T):
+        self.B = B
+        self.T = T
+        with open('input.txt', 'r', encoding='utf8') as f:
+            text = f.read()
+        enc = tiktoken.get_encoding('gpt2')
+        tokens = enc.encode(text)
+        self.tokens = torch.tensor(tokens)
+        print(f'loaded {len(self.tokens)} tokens')
+        print(f'1 epoch = {len(self.tokens) // (B*T)}')
+
+        self.current_position = 0
+
+    def next_batch(self):
+        B, T = self.B, self.T
+        buf = self.tokens[self.current_position: self.current_position + B*T + 1]
+        x = (buf[:-1]).view(B, T)
+        y = (buf[1:]).view(B, T)
+        if self.current_position + (B*T+1) > len(self.tokens):
+            self.current_position = 0
+
+        return x, y
+
+
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
 num_return_sequences = 5
 max_length = 30
-model_gpt = GPT.from_pretrained('gpt2')
+model_gpt = GPT(GPTConfig)
+model_gpt.to(device)
+
+train_loader = DataLoaderLite(B=4, T=32)
+
+optimizer = torch.optim.AdamW(model_gpt.parameters(), lr=3e-4)
+
+for i in range(50):
+    optimizer.zero_grad()
+    x, y = train_loader.next_batch()
+    x, y = x.to(device), y.to(device)
+    logits, loss = model_gpt(x, y)
+    loss.backward()
+    optimizer.step()
+    print(f'loss: {loss.item()}')
+
+# model_gpt = GPT.from_pretrained('gpt2')
 # model_gpt = GPT2LMHeadModel.from_pretrained('gpt2')
-print('model loaded')
-model_gpt.eval()
-model_gpt.to('cuda')
-import tiktoken
-
-enc = tiktoken.get_encoding('gpt2')
-tokens = enc.encode("Hello, I'm a language model,")
-
-tokens = torch.tensor(tokens, dtype=torch.long)
-x = tokens.unsqueeze(0).repeat(num_return_sequences, 1).to('cuda')
-torch.manual_seed(42)
-torch.cuda.manual_seed(42)
-
-while x.size(1) < max_length:
-    with torch.no_grad():
-        logits = model_gpt(x)
-        logits = logits[:, -1, :]
-        probs = F.softmax(logits, dim=-1)
-        topk_prob, topk_idices = torch.topk(probs, 50, dim=-1)
-        ix = torch.multinomial(topk_prob, 1)
-        xcol = torch.gather(topk_idices, -1, ix)
-        x = torch.cat((x, xcol), dim=1)
-
-for i in range(num_return_sequences):
-    tokens = x[i, : max_length].tolist()
-    decoded = enc.decode(tokens)
-    print(">", decoded)
+# print('model loaded')
+# model_gpt.eval()
+# model_gpt.to('cuda')
+# import tiktoken
+#
+# enc = tiktoken.get_encoding('gpt2')
+# tokens = enc.encode("Hello, I'm a language model,")
+#
+# tokens = torch.tensor(tokens, dtype=torch.long)
+# x = tokens.unsqueeze(0).repeat(num_return_sequences, 1).to('cuda')
+# torch.manual_seed(42)
+# torch.cuda.manual_seed(42)
+#
+# while x.size(1) < max_length:
+#     with torch.no_grad():
+#         logits = model_gpt(x)
+#         logits = logits[:, -1, :]
+#         probs = F.softmax(logits, dim=-1)
+#         topk_prob, topk_idices = torch.topk(probs, 50, dim=-1)
+#         ix = torch.multinomial(topk_prob, 1)
+#         xcol = torch.gather(topk_idices, -1, ix)
+#         x = torch.cat((x, xcol), dim=1)
+#
+# for i in range(num_return_sequences):
+#     tokens = x[i, : max_length].tolist()
+#     decoded = enc.decode(tokens)
+#     print(">", decoded)

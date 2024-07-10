@@ -1,3 +1,4 @@
 transformers
 torch
+setuptools-rust
 tiktoken
