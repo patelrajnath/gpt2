@@ -1,4 +1,5 @@
 import math
+import time
 from dataclasses import dataclass
 import torch
 from torch import nn
@@ -201,6 +202,9 @@ class DataLoaderLite(object):
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
+if torch.cuda.is_available():
+    torch.set_float32_matmul_precision('high')
+
 torch.manual_seed(1337)
 if torch.cuda.is_available():
     torch.cuda.manual_seed(1337)
@@ -209,19 +213,24 @@ num_return_sequences = 5
 max_length = 30
 model_gpt = GPT(GPTConfig)
 model_gpt.to(device)
-
-train_loader = DataLoaderLite(B=4, T=32)
+model_gpt = torch.compile(model_gpt)
+train_loader = DataLoaderLite(B=4, T=1024)
 
 optimizer = torch.optim.AdamW(model_gpt.parameters(), lr=3e-4)
 
 for i in range(50):
+    t1 = time.time()
     optimizer.zero_grad()
     x, y = train_loader.next_batch()
     x, y = x.to(device), y.to(device)
     logits, loss = model_gpt(x, y)
     loss.backward()
     optimizer.step()
-    print(f'loss: {loss.item()}')
+    if torch.cuda.is_available():
+        torch.cuda.synchronize()
+    t2 = time.time()
+
+    print(f'loss: {loss.item()}, step:{i}, time: {(t2-t1)*1000}')
 
 # model_gpt = GPT.from_pretrained('gpt2')
 # model_gpt = GPT2LMHeadModel.from_pretrained('gpt2')
