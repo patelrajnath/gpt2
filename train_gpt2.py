@@ -181,8 +181,8 @@ class GPT(nn.Module):
         param_dict = {pn: p for pn, p in self.named_parameters()}
         param_dict = {pn: p for pn, p in param_dict.items() if p.requires_grad}
 
-        decay_params = [p for _, p in param_dict.items() if p.dim >= 2]
-        nodecay_params = [p for _, p in param_dict.items() if p.dim <= 2]
+        decay_params = [p for _, p in param_dict.items() if p.dim() >= 2]
+        nodecay_params = [p for _, p in param_dict.items() if p.dim() < 2]
 
         num_decay_params = sum(p.numel() for p in decay_params)
         num_nodecay_params = sum(p.numel() for p in nodecay_params)
