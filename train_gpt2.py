@@ -14,6 +14,7 @@ class CausalSelfAttention(nn.Module):
         assert config.n_embed % config.n_head == 0
         self.c_attn = nn.Linear(config.n_embed, 3 * config.n_embed)
         self.c_proj = nn.Linear(config.n_embed, config.n_embed)
+        self.c_proj.GPT_INIT_SCALE = 1
         self.n_head = config.n_head
         self.n_embed = config.n_embed
         self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size).
@@ -44,6 +45,7 @@ class MLP(nn.Module):
         self.c_fc = nn.Linear(config.n_embed, 4 * config.n_embed)
         self.gelu = nn.GELU(approximate='tanh')
         self.c_proj = nn.Linear(4 * config.n_embed, config.n_embed)
+        self.c_proj.GPT_INIT_SCALE = 1
 
     def forward(self, x):
         x = self.c_fc(x)
@@ -91,6 +93,21 @@ class GPT(nn.Module):
 
         # weight sharing scheme
         self.transformer.wte.weight = self.lm_head.weight
+
+        # init params
+        self.apply(self._init_weights)
+
+    def _init_weights(self, module):
+        if isinstance(module, nn.Linear):
+            std = 0.02
+            if hasattr(module, 'GPT_INIT_SCALE'):
+                std = (2*self.config.n_layer) ** -0.5
+            torch.nn.init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
+
+        elif isinstance(module, nn.Embedding):
+            torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
 
     def forward(self, idx, target=None):
         B, T = idx.size()
@@ -166,22 +183,27 @@ class DataLoaderLite(object):
         tokens = enc.encode(text)
         self.tokens = torch.tensor(tokens)
         print(f'loaded {len(self.tokens)} tokens')
-        print(f'1 epoch = {len(self.tokens) // (B*T)}')
+        print(f'1 epoch = {len(self.tokens) // (B * T)}')
 
         self.current_position = 0
 
     def next_batch(self):
         B, T = self.B, self.T
-        buf = self.tokens[self.current_position: self.current_position + B*T + 1]
+        buf = self.tokens[self.current_position: self.current_position + B * T + 1]
         x = (buf[:-1]).view(B, T)
         y = (buf[1:]).view(B, T)
-        if self.current_position + (B*T+1) > len(self.tokens):
+        self.current_position += self.current_position + (B * T + 1)
+        if self.current_position + (B * T + 1) > len(self.tokens):
             self.current_position = 0
 
         return x, y
 
 
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+torch.manual_seed(1337)
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(1337)
 
 num_return_sequences = 5
 max_length = 30
