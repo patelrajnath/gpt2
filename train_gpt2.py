@@ -230,8 +230,7 @@ for i in range(50):
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     t2 = time.time()
-
-    print(f'loss: {loss.item()}, step:{i}, time: {(t2-t1)*1000}')
+    print(f'loss: {loss.item()}, step:{i}, time: {(t2-t1)*1000}, token/sec:{(train_loader.B * train_loader.T) / (t2-t1)}')
 
 # model_gpt = GPT.from_pretrained('gpt2')
 # model_gpt = GPT2LMHeadModel.from_pretrained('gpt2')
