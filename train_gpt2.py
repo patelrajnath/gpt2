@@ -213,7 +213,8 @@ num_return_sequences = 5
 max_length = 30
 model_gpt = GPT(GPTConfig)
 model_gpt.to(device)
-model_gpt = torch.compile(model_gpt)
+if torch.cuda.is_available():
+    model_gpt = torch.compile(model_gpt)
 train_loader = DataLoaderLite(B=4, T=1024)
 
 optimizer = torch.optim.AdamW(model_gpt.parameters(), lr=3e-4)
