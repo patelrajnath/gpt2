@@ -213,7 +213,7 @@ if torch.cuda.is_available():
 
 num_return_sequences = 5
 max_length = 30
-model_gpt = GPT(GPTConfig)
+model_gpt = GPT(GPTConfig(vocab_size=50304))
 model_gpt.to(device)
 if torch.cuda.is_available():
     model_gpt = torch.compile(model_gpt)
