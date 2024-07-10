@@ -217,7 +217,7 @@ if torch.cuda.is_available():
 
 num_return_sequences = 5
 max_length = 30
-max_lr = 3e-4
+max_lr = 6e-4
 min_lr = max_lr * 0.1
 warmpu_steps = 10
 max_steps = 50
@@ -253,13 +253,13 @@ for step in range(max_steps):
     loss.backward()
     lr = get_lr(step)
     for param_groups in optimizer.param_groups:
-        param_groups[lr] = lr
+        param_groups['lr'] = lr
 
     optimizer.step()
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     t2 = time.time()
-    print(f'step:{step} | loss: {loss.item():.6f} | lr :{lr:.6f} | time: {(t2-t1)*1000} | norm: {norm:4f} | '
+    print(f'step:{step} | loss: {loss.item():.6f} | lr :{lr:.6f} | time: {(t2-t1)*1000}ms | norm: {norm:0.4f} | '
           f'token/sec:{(train_loader.B * train_loader.T) / (t2-t1)}')
 
 # model_gpt = GPT.from_pretrained('gpt2')
