@@ -340,8 +340,8 @@ for step in range(max_steps):
     t2 = time.time()
     if master_process:
         print(
-            f'step:{step} | loss: {loss_accum.item():.6f} | lr :{lr:.6f} | time: {(t2 - t1) * 1000}ms | norm: {norm:0.4f} | '
-            f'token/sec:{(train_loader.B * train_loader.T * grad_accum_steps * ddp_world_size) / (t2 - t1)}')
+            f'step:{step:4d} | loss: {loss_accum.item():.6f} | lr :{lr:.6f} | time: {(t2 - t1) * 1000:.4f}ms | norm: {norm:0.4f} | '
+            f'token/sec:{(train_loader.B * train_loader.T * grad_accum_steps * ddp_world_size) / (t2 - t1):.4f}')
 
 # model_gpt = GPT.from_pretrained('gpt2')
 # model_gpt = GPT2LMHeadModel.from_pretrained('gpt2')
