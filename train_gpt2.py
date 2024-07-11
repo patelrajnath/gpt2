@@ -245,7 +245,7 @@ B = 4
 T = 1024
 total_batch_size = 524288 # 2**19
 assert total_batch_size % (B*T) == 0
-grad_accum_steps = total_batch_size / (B*T)
+grad_accum_steps = total_batch_size // (B*T)
 print(f'total desired batch size:{total_batch_size}')
 print(f'total gradient accumulation steps: {grad_accum_steps}')
 
