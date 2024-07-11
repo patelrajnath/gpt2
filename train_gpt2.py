@@ -241,6 +241,13 @@ max_lr = 6e-4
 min_lr = max_lr * 0.1
 warmpu_steps = 10
 max_steps = 50
+B = 4
+T = 1024
+total_batch_size = 524288 # 2**19
+assert total_batch_size % (B*T) == 0
+grad_accum_steps = total_batch_size / (B*T)
+print(f'total desired batch size:{total_batch_size}')
+print(f'total gradient accumulation steps: {grad_accum_steps}')
 
 model_gpt = GPT(GPTConfig(vocab_size=50304))
 model_gpt.to(device)
@@ -265,11 +272,14 @@ def get_lr(it):
 for step in range(max_steps):
     t1 = time.time()
     optimizer.zero_grad()
-    x, y = train_loader.next_batch()
-    x, y = x.to(device), y.to(device)
-    # with torch.autocast(device_type=device, dtype=torch.bfloat16):
-    logits, loss = model_gpt(x, y)
-    loss.backward()
+
+    for micro_steps in range(grad_accum_steps):
+        x, y = train_loader.next_batch()
+        x, y = x.to(device), y.to(device)
+        # with torch.autocast(device_type=device, dtype=torch.bfloat16):
+        logits, loss = model_gpt(x, y)
+        loss = loss / grad_accum_steps
+        loss.backward()
 
     norm = torch.nn.utils.clip_grad_norm_(model_gpt.parameters(), 1.0)
 
