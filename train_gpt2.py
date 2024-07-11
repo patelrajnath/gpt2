@@ -272,13 +272,14 @@ def get_lr(it):
 for step in range(max_steps):
     t1 = time.time()
     optimizer.zero_grad()
-
+    loss_accum = 0.0
     for micro_steps in range(grad_accum_steps):
         x, y = train_loader.next_batch()
         x, y = x.to(device), y.to(device)
         # with torch.autocast(device_type=device, dtype=torch.bfloat16):
         logits, loss = model_gpt(x, y)
         loss = loss / grad_accum_steps
+        loss_accum += loss.detach()
         loss.backward()
 
     norm = torch.nn.utils.clip_grad_norm_(model_gpt.parameters(), 1.0)
@@ -291,8 +292,8 @@ for step in range(max_steps):
     if torch.cuda.is_available():
         torch.cuda.synchronize()
     t2 = time.time()
-    print(f'step:{step} | loss: {loss.item():.6f} | lr :{lr:.6f} | time: {(t2 - t1) * 1000}ms | norm: {norm:0.4f} | '
-          f'token/sec:{(train_loader.B * train_loader.T) / (t2 - t1)}')
+    print(f'step:{step} | loss: {loss_accum.item():.6f} | lr :{lr:.6f} | time: {(t2 - t1) * 1000}ms | norm: {norm:0.4f} | '
+          f'token/sec:{(train_loader.B * train_loader.T * grad_accum_steps) / (t2 - t1)}')
 
 # model_gpt = GPT.from_pretrained('gpt2')
 # model_gpt = GPT2LMHeadModel.from_pretrained('gpt2')
