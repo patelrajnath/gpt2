@@ -1,5 +1,6 @@
 import inspect
 import math
+import os
 import time
 from dataclasses import dataclass
 import torch
@@ -227,7 +228,31 @@ class DataLoaderLite(object):
         return x, y
 
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+# device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+from torch.distributed import  init_process_group, destroy_process_group
+# Setup DDP
+# torchrun command sets the env variable RANK, LOCAL_RANK, and WORLD_SIZE
+ddp = int(os.environ.get('RANK', -1)) != -1
+if ddp:
+    # use of ddp requires CUDA, and we set the device appropriately according to the RANK
+    assert torch.cuda.is_available()
+    init_process_group(backend='nccl')
+    ddp_rank = int(os.environ['RANK'])
+    ddp_local_rank = int(os.environ['LOCAL_RANK'])
+    ddp_world_size = int(os.environ['WORLD_SIZE'])
+    device = f'cuda:{ddp_local_rank}'
+    torch.cuda.set_device(device)
+    master_process = ddp_rank == 0 # this process will do logging, checkpointing etc
+else:
+    ddp_rank = 0
+    ddp_local_rank = 0
+    ddp_world_size = 1
+    master_process = True
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f'using device:{device}')
+
+
 if torch.cuda.is_available():
     torch.set_float32_matmul_precision('high')
 
@@ -244,10 +269,14 @@ max_steps = 50
 B = 4
 T = 1024
 total_batch_size = 524288 # 2**19
-assert total_batch_size % (B*T) == 0
-grad_accum_steps = total_batch_size // (B*T)
-print(f'total desired batch size:{total_batch_size}')
-print(f'total gradient accumulation steps: {grad_accum_steps}')
+assert total_batch_size % (B*T*ddp_world_size) == 0
+grad_accum_steps = total_batch_size // (B*T*ddp_world_size)
+if master_process:
+    print(f'total desired batch size:{total_batch_size}')
+    print(f'total gradient accumulation steps: {grad_accum_steps}')
+
+print(f"I'm GPU:{device}")
+exit()
 
 model_gpt = GPT(GPTConfig(vocab_size=50304))
 model_gpt.to(device)
