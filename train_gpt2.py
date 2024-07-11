@@ -203,9 +203,11 @@ class GPT(nn.Module):
 
 
 class DataLoaderLite(object):
-    def __init__(self, B, T):
+    def __init__(self, B, T, process_rank, num_processes):
         self.B = B
         self.T = T
+        self.process_rank = process_rank
+        self.num_processes = num_processes
         with open('input.txt', 'r', encoding='utf8') as f:
             text = f.read()
         enc = tiktoken.get_encoding('gpt2')
@@ -214,17 +216,16 @@ class DataLoaderLite(object):
         print(f'loaded {len(self.tokens)} tokens')
         print(f'1 epoch = {len(self.tokens) // (B * T)}')
 
-        self.current_position = 0
+        self.current_position = self.B * self.T * self.process_rank
 
     def next_batch(self):
         B, T = self.B, self.T
         buf = self.tokens[self.current_position: self.current_position + B * T + 1]
         x = (buf[:-1]).view(B, T)
         y = (buf[1:]).view(B, T)
-        self.current_position += self.current_position + (B * T + 1)
-        if self.current_position + (B * T + 1) > len(self.tokens):
-            self.current_position = 0
-
+        self.current_position += self.current_position + (B * T * self.num_processes + 1)
+        if self.current_position + (B * T * self.num_processes + 1) > len(self.tokens):
+            self.current_position = self.B * self.T * self.process_rank
         return x, y
 
 
@@ -232,6 +233,7 @@ class DataLoaderLite(object):
 
 from torch.distributed import  init_process_group, destroy_process_group
 # Setup DDP
+# torchrun --standalone --nproc_per_node=8 train_gpt2.py
 # torchrun command sets the env variable RANK, LOCAL_RANK, and WORLD_SIZE
 ddp = int(os.environ.get('RANK', -1)) != -1
 if ddp:
@@ -241,7 +243,7 @@ if ddp:
     ddp_rank = int(os.environ['RANK'])
     ddp_local_rank = int(os.environ['LOCAL_RANK'])
     ddp_world_size = int(os.environ['WORLD_SIZE'])
-    device = f'cuda:{ddp_local_rank}'
+    device = f'cuda:{ddp_rank}'
     torch.cuda.set_device(device)
     master_process = ddp_rank == 0 # this process will do logging, checkpointing etc
 else:
@@ -275,14 +277,11 @@ if master_process:
     print(f'total desired batch size:{total_batch_size}')
     print(f'total gradient accumulation steps: {grad_accum_steps}')
 
-print(f"I'm GPU:{device}")
-exit()
-
 model_gpt = GPT(GPTConfig(vocab_size=50304))
 model_gpt.to(device)
 if torch.cuda.is_available():
     model_gpt = torch.compile(model_gpt)
-train_loader = DataLoaderLite(B=B, T=T)
+train_loader = DataLoaderLite(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size)
 
 optimizer = model_gpt.configure_optimizer(weight_decay=0.1, learning_rate=max_lr, device=device)
 
