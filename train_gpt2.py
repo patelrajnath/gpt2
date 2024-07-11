@@ -283,7 +283,7 @@ model_gpt = GPT(GPTConfig(vocab_size=50304))
 model_gpt.to(device)
 
 if ddp:
-    model_gpt = DDP(model_gpt, device_ids=ddp_local_rank)
+    model_gpt = DDP(model_gpt, device_ids=[ddp_local_rank])
 
 if torch.cuda.is_available():
     model_gpt = torch.compile(model_gpt)
