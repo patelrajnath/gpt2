@@ -3,6 +3,8 @@ import math
 import os
 import time
 from dataclasses import dataclass
+
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -234,8 +236,48 @@ class DataLoaderLite(object):
         return x, y
 
 
-# device = 'cuda' if torch.cuda.is_available() else 'cpu'
+def load_tokens(filename):
+    npt = np.load(filename)
+    ppt = torch.tensor(npt, dtype=torch.long)
+    return npt
 
+
+class DataLoaderEDU10B(object):
+    def __init__(self, B, T, process_rank, num_processes, split):
+        self.B = B
+        self.T = T
+        self.process_rank = process_rank
+        self.num_processes = num_processes
+        assert split in {'train', 'val'}
+
+        # Get the shard filenames
+        data_root = "edu_fineweb10B"
+        shards = os.listdir(data_root)
+        shards = [s for s in shards if split in s]
+        shards = [os.path.join(data_root, s) for s in shards]
+        self.shards = shards
+        assert len(shards) > 0, f"no shards found for split:{split}"
+
+        if master_process:
+            print(f'found {len(shards)} shards for split {split}')
+        self.current_shard = 0
+        self.tokens = load_tokens(self.shards[self.current_shard])
+        self.current_position = self.B * self.T * self.process_rank
+
+    def next_batch(self):
+        B, T = self.B, self.T
+        buf = self.tokens[self.current_position: self.current_position + B * T + 1]
+        x = (buf[:-1]).view(B, T)
+        y = (buf[1:]).view(B, T)
+        self.current_position += self.current_position + (B * T * self.num_processes + 1)
+        if self.current_position + (B * T * self.num_processes + 1) > len(self.tokens):
+            self.current_shard = (self.current_shard + 1) % len(self.shards)
+            self.current_position = self.B * self.T * self.process_rank
+            self.tokens = load_tokens(self.shards[self.current_shard])
+        return x, y
+
+
+# device = 'cuda' if torch.cuda.is_available() else 'cpu'
 from torch.distributed import init_process_group, destroy_process_group
 
 # Setup DDP
@@ -273,8 +315,8 @@ num_return_sequences = 5
 max_length = 30
 max_lr = 6e-4
 min_lr = max_lr * 0.1
-warmpu_steps = 10
-max_steps = 50
+warmpu_steps = 715
+max_steps = 19073
 B = 4
 T = 1024
 total_batch_size = 524288  # 2**19
@@ -296,7 +338,8 @@ if torch.cuda.is_available() and use_compile:
 
 raw_model = model_gpt.module if ddp else model_gpt
 
-train_loader = DataLoaderLite(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size)
+train_loader = DataLoaderEDU10B(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size, split='train')
+val_loader = DataLoaderEDU10B(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size, split='val')
 optimizer = raw_model.configure_optimizer(weight_decay=0.1, learning_rate=max_lr, device=device)
 
 
