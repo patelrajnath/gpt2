@@ -290,7 +290,7 @@ model_gpt.to(device)
 if ddp:
     model_gpt = DDP(model_gpt, device_ids=[ddp_local_rank])
 
-use_compile=False
+use_compile = True
 if torch.cuda.is_available() and use_compile:
     model_gpt = torch.compile(model_gpt)
 
