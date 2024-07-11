@@ -22,8 +22,8 @@ class CausalSelfAttention(nn.Module):
         self.c_proj.GPT_INIT_SCALE = 1
         self.n_head = config.n_head
         self.n_embed = config.n_embed
-        self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size).
-                                                view(1, 1, config.block_size, config.block_size)))
+        # self.register_buffer("bias", torch.tril(torch.ones(config.block_size, config.block_size).
+        #                                         view(1, 1, config.block_size, config.block_size)))
 
     def forward(self, x):
         B, T, C = x.size()
