@@ -189,8 +189,9 @@ class GPT(nn.Module):
 
         num_decay_params = sum(p.numel() for p in decay_params)
         num_nodecay_params = sum(p.numel() for p in nodecay_params)
-        print(f'num params decayed: {len(decay_params)} with {num_decay_params} parameters')
-        print(f'num params nodecayed: {len(nodecay_params)} with {num_nodecay_params} parameters')
+        if master_process:
+            print(f'num params decayed: {len(decay_params)} with {num_decay_params} parameters')
+            print(f'num params nodecayed: {len(nodecay_params)} with {num_nodecay_params} parameters')
         optim_groups = [
             {'params': decay_params, 'weight)decay': weight_decay},
             {'params': nodecay_params, 'weight_decay': 0.0}
@@ -198,7 +199,8 @@ class GPT(nn.Module):
 
         fused_available = 'fused' in inspect.signature(torch.optim.AdamW).parameters
         use_fused = fused_available and 'cuda' in device
-        print(f'using fused AdamW:{use_fused}')
+        if master_process:
+            print(f'using fused AdamW:{use_fused}')
         optimizer = torch.optim.AdamW(optim_groups, lr=learning_rate, betas=(0.9, 0.95), eps=1e-8, fused=use_fused)
 
         return optimizer
@@ -215,8 +217,9 @@ class DataLoaderLite(object):
         enc = tiktoken.get_encoding('gpt2')
         tokens = enc.encode(text)
         self.tokens = torch.tensor(tokens)
-        print(f'loaded {len(self.tokens)} tokens')
-        print(f'1 epoch = {len(self.tokens) // (B * T)}')
+        if master_process:
+            print(f'loaded {len(self.tokens)} tokens')
+            print(f'1 epoch = {len(self.tokens) // (B * T)}')
 
         self.current_position = self.B * self.T * self.process_rank
 
@@ -260,6 +263,8 @@ else:
 if torch.cuda.is_available():
     torch.set_float32_matmul_precision('high')
 
+device_type = 'cuda' if device.startswith('cuda') else 'cpu'
+
 torch.manual_seed(1337)
 if torch.cuda.is_available():
     torch.cuda.manual_seed(1337)
@@ -285,7 +290,8 @@ model_gpt.to(device)
 if ddp:
     model_gpt = DDP(model_gpt, device_ids=[ddp_local_rank])
 
-if torch.cuda.is_available():
+use_compile=False
+if torch.cuda.is_available() and use_compile:
     model_gpt = torch.compile(model_gpt)
 
 raw_model = model_gpt.module if ddp else model_gpt
@@ -312,8 +318,8 @@ for step in range(max_steps):
     for micro_steps in range(grad_accum_steps):
         x, y = train_loader.next_batch()
         x, y = x.to(device), y.to(device)
-        # with torch.autocast(device_type=device, dtype=torch.bfloat16):
-        logits, loss = model_gpt(x, y)
+        with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
+            logits, loss = model_gpt(x, y)
         loss = loss / grad_accum_steps
         loss_accum += loss.detach()
         if ddp:
