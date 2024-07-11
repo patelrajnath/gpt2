@@ -253,7 +253,7 @@ model_gpt = GPT(GPTConfig(vocab_size=50304))
 model_gpt.to(device)
 if torch.cuda.is_available():
     model_gpt = torch.compile(model_gpt)
-train_loader = DataLoaderLite(B=4, T=1024)
+train_loader = DataLoaderLite(B=B, T=T)
 
 optimizer = model_gpt.configure_optimizer(weight_decay=0.1, learning_rate=max_lr, device=device)
 
