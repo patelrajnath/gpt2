@@ -414,8 +414,8 @@ for step in range(max_steps):
             if ddp:
                 dist.all_reduce(val_loss_accum, op=dist.ReduceOp.AVG)
             if master_process:
-                print(f'validation loss:{val_loss_accum.item:.4f}')
-    if step > 0 and step % 250 == 0 or last_step:
+                print(f'validation loss:{val_loss_accum.item():.4f}')
+    if step % 250 == 0 or last_step:
         model_gpt.eval()
         num_return_sequences = 5
         max_length = 30
