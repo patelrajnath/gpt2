@@ -415,6 +415,8 @@ for step in range(max_steps):
                 dist.all_reduce(val_loss_accum, op=dist.ReduceOp.AVG)
             if master_process:
                 print(f'validation loss:{val_loss_accum.item():.4f}')
+                with open(log_file, "a") as f:
+                    f.write(f"{step} val {val_loss_accum.item():.4f}\n")
 
                 if step > 0 and (step % 5000 == 0 or last_step):
                     # optionally write model checkpoints
@@ -517,6 +519,8 @@ for step in range(max_steps):
         print(
             f'step:{step:4d} | loss: {loss_accum.item():.6f} | lr :{lr:.6f} | time: {(t2 - t1) * 1000:.4f}ms | norm: {norm:0.4f} | '
             f'token/sec:{(train_loader.B * train_loader.T * grad_accum_steps * ddp_world_size) / (t2 - t1):.4f}')
+        with open(log_file, "a") as f:
+                f.write(f"{step} train {loss_accum.item():.6f}\n")
 
 
 if ddp:
