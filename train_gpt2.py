@@ -318,7 +318,7 @@ max_lr = 6e-4
 min_lr = max_lr * 0.1
 warmpu_steps = 715
 max_steps = 19073
-B = 4
+B = 16
 T = 1024
 total_batch_size = 524288  # 2**19
 assert total_batch_size % (B * T * ddp_world_size) == 0
