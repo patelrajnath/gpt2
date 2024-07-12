@@ -300,7 +300,7 @@ def get_most_likely_row(tokens, mask, logits):
     shift_losses = F.cross_entropy(flat_shift_logits, flat_shift_tokens, reduction='none')
     shift_losses = shift_losses.view(tokens.size(0), -1)
     # now get the average loss just for the completion region (where mask == 1), in each row
-    shift_mask = (mask[..., 1:]).contiguous() # we must shift mask, so we start at the last prompt token
+    shift_mask = (mask[..., 1:]).contiguous()  # we must shift mask, so we start at the last prompt token
     masked_shift_losses = shift_losses * shift_mask
     # sum and divide by the number of 1s in the mask
     sum_loss = masked_shift_losses.sum(dim=1)
@@ -379,8 +379,9 @@ optimizer = raw_model.configure_optimizer(weight_decay=0.1, learning_rate=max_lr
 log_dir = "log"
 os.makedirs(log_dir, exist_ok=True)
 log_file = os.path.join(log_dir, f"log.txt")
-with open(log_file, "w") as f: # open for writing to clear the file
+with open(log_file, "w") as f:  # open for writing to clear the file
     pass
+
 
 def get_lr(it):
     if it < warmpu_steps:
@@ -510,4 +511,3 @@ for step in range(max_steps):
 # model_gpt.to('cuda')
 # import tiktoken
 #
-
