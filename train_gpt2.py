@@ -442,7 +442,7 @@ for step in range(max_steps):
 
         while xgen.size(1) < max_length:
             with torch.no_grad():
-                logits = model_gpt(x)
+                logits, loss = model_gpt(xgen)
                 logits = logits[:, -1, :]
                 probs = F.softmax(logits, dim=-1)
                 topk_prob, topk_idices = torch.topk(probs, 50, dim=-1)
@@ -469,8 +469,8 @@ for step in range(max_steps):
             mask = mask.to(device)
             # get the logits
             with torch.no_grad():
-                with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
-                    logits, loss = model_gpt(tokens)
+                # with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
+                logits, loss = model_gpt(tokens)
                 pred_norm = get_most_likely_row(tokens, mask, logits)
             num_total += 1
             num_correct_norm += int(pred_norm == label)
