@@ -458,7 +458,7 @@ for step in range(max_steps):
             print(f"rank:{ddp_rank} sample:", decoded)
 
     # once in a while evaluate hellaswag
-    if (step % 250 == 0 or last_step) and (not use_compile):
+    if step > 0 and (step % 250 == 0 or last_step) and (not use_compile):
         num_correct_norm = 0
         num_total = 0
         for i, example in enumerate(iterate_examples("val")):
