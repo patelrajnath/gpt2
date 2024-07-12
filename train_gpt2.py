@@ -238,8 +238,9 @@ class DataLoaderLite(object):
 
 def load_tokens(filename):
     npt = np.load(filename)
+    npt = npt.astype(np.int32)
     ppt = torch.tensor(npt, dtype=torch.long)
-    return npt
+    return ppt
 
 
 class DataLoaderEDU10B(object):
@@ -361,8 +362,8 @@ for step in range(max_steps):
     for micro_steps in range(grad_accum_steps):
         x, y = train_loader.next_batch()
         x, y = x.to(device), y.to(device)
-        with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
-            logits, loss = model_gpt(x, y)
+        # with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
+        logits, loss = model_gpt(x, y)
         loss = loss / grad_accum_steps
         loss_accum += loss.detach()
         if ddp:
