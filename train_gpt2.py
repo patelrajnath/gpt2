@@ -375,7 +375,12 @@ raw_model = model_gpt.module if ddp else model_gpt
 train_loader = DataLoaderEDU10B(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size, split='train')
 val_loader = DataLoaderEDU10B(B=B, T=T, process_rank=ddp_rank, num_processes=ddp_world_size, split='val')
 optimizer = raw_model.configure_optimizer(weight_decay=0.1, learning_rate=max_lr, device=device)
-
+# create the log directory we will write checkpoints to and log to
+log_dir = "log"
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, f"log.txt")
+with open(log_file, "w") as f: # open for writing to clear the file
+    pass
 
 def get_lr(it):
     if it < warmpu_steps:
@@ -450,7 +455,7 @@ for step in range(max_steps):
             # get the logits
             with torch.no_grad():
                 with torch.autocast(device_type=device_type, dtype=torch.bfloat16):
-                    logits, loss = model_signature(tokens)
+                    logits, loss = model_gpt(tokens)
                 pred_norm = get_most_likely_row(tokens, mask, logits)
             num_total += 1
             num_correct_norm += int(pred_norm == label)
