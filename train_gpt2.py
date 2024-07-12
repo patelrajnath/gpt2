@@ -448,7 +448,7 @@ for step in range(max_steps):
                 topk_prob, topk_idices = torch.topk(probs, 50, dim=-1)
                 ix = torch.multinomial(topk_prob, 1, generator=sample_rng)
                 xcol = torch.gather(topk_idices, -1, ix)
-                x = torch.cat((x, xcol), dim=1)
+                x = torch.cat((xgen, xcol), dim=1)
 
         for i in range(num_return_sequences):
             tokens = x[i, : max_length].tolist()
